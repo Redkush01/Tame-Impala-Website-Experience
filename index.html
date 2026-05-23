@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Tame Impala — Touch The Music</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700&family=Space+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- 1. WebCam & Visuals -->
+  <div id="scene">
+    <video id="video" autoplay playsinline muted></video>
+    <video id="overlayVideo" src="assets_loop.mp4" autoplay loop muted playsinline></video>
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <!-- 2. Start Curtain -->
+  <div id="curtain">
+    <div class="prompt">PRESS SPACEBAR</div>
+    <div class="sub">to enter the experience</div>
+    <div class="sub hint">Activate camera for immersion. Headphones recommended.</div>
+  </div>
+
+  <!-- 3. Cinematic Tutorial Overlay -->
+  <div id="tutorial">
+    <div class="step active">
+      <div class="gesture-icon">🤏</div>
+      <div class="gesture-text">pinch right hand to control volume</div>
+    </div>
+    <div class="step">
+      <div class="gesture-icon">🖐️🔄</div>
+      <div class="gesture-text">rotate left hand for reverb</div>
+    </div>
+    <div class="step">
+      <div class="gesture-icon">👉</div>
+      <div class="gesture-text">hold✋ & swipe⏭️ to remix</div>
+    </div>
+    <div class="step">
+      <div class="gesture-icon">✊ / 🖐️</div>
+      <div class="gesture-text">fist to pause / open hand to play</div>
+    </div>
+    <div class="skip">Press Space to Skip</div>
+  </div>
+
+  <!-- 4. Minimal HUD -->
+  <div id="hud">
+    <img id="tame-logo" src="logoti.png" alt="Tame Impala" />
+    <div id="easter-egg-hint">🤘 = unlock hidden event</div>
+    <div id="player-container">
+      <div id="track-name">The Less I Know The Better</div>
+      <div id="time-display">00:00 / 00:00</div>
+    </div>
+    <div id="volume-ring"></div>
+    <div id="notification"></div>
+  </div>
+
+  <!-- 5. Song Selector -->
+  <div id="song-selector">
+    <button class="active">The Less I Know The Better</button>
+    <button>Borderline</button>
+    <button>Dracula</button>
+  </div>
+
+  <!-- 6. Audio Sources -->
+  <audio id="trackA" src="thelessiknowthebetter.flac" crossorigin="anonymous" preload="auto"></audio>
+  <audio id="trackB" crossorigin="anonymous" preload="auto"></audio>
+
+  <!-- 7. Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/hands.js" crossorigin="anonymous"></script>
+  <script type="module" src="js/main.js"></script>
+
+</body>
+</html>
