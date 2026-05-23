@@ -15,6 +15,7 @@ var watchdogInterval  = null;
 /* ── Start webcam ── */
 export async function startCamera(video) {
   videoElement = video;
+  var isMobile = window.innerWidth <= 768;
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     throw new Error('getUserMedia not supported in this browser');
@@ -23,9 +24,9 @@ export async function startCamera(video) {
   stream = await navigator.mediaDevices.getUserMedia({
     video: {
       facingMode: 'user',
-      width:     { ideal: 640, max: 640 },
-      height:    { ideal: 480, max: 480 },
-      frameRate: { ideal: 30,  max: 30 }
+      width:     isMobile ? { ideal: 320, max: 480 } : { ideal: 640, max: 640 },
+      height:    isMobile ? { ideal: 240, max: 360 } : { ideal: 480, max: 480 },
+      frameRate: isMobile ? { ideal: 15, max: 30 } : { ideal: 30,  max: 30 }
     }
   });
 
@@ -57,8 +58,8 @@ export function startMediaPipe(onResults) {
           selfieMode: true,
           maxNumHands: 2,
           modelComplexity: 1,
-          minDetectionConfidence: 0.7,
-          minTrackingConfidence: 0.7
+          minDetectionConfidence: 0.8,
+          minTrackingConfidence: 0.8
         });
         hands.onResults(function(results) {
           lastResultsTime = performance.now();
@@ -103,7 +104,13 @@ function detectLoop() {
   if (!detectionActive || !videoElement) return;
   requestAnimationFrame(detectLoop);
 
-  if (isProcessingFrame) return;   /* drop frame — previous still in-flight */
+  if (isProcessingFrame) {
+    if (performance.now() - lastResultsTime > 1000) {
+      isProcessingFrame = false; /* force clear stuck frame */
+    } else {
+      return; /* drop frame — previous still in-flight */
+    }
+  }
 
   isProcessingFrame = true;
   hands.send({ image: videoElement })

@@ -119,6 +119,7 @@ function triggerEvent(now) {
     console.log("[EasterEgg] Event ended.");
     if (onUpdateState) onUpdateState("easterEggActive", false);
     emitState();
+    phaseTimeouts = []; /* Release memory */
   }, 8000));
 }
 

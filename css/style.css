@@ -214,6 +214,8 @@ html, body {
   transform: scaleX(-1);
   z-index: 1;
   /* Natural webcam feed: no filters or blend modes to preserve realism */
+  /* GPU layer promotion: prevents scaleX(-1) from re-rasterizing each frame */
+  will-change: transform;
 }
 
 #overlayVideo {
@@ -229,13 +231,25 @@ html, body {
   pointer-events: none;
   /* Moved dreamy atmosphere to the overlay layer */
   filter: contrast(1.15) saturate(1.5) hue-rotate(280deg);
-  transform: none;
-  animation: none;
   object-fit: cover;
+  /* GPU layer promotion: isolates the filter+blend cost to its own
+     compositor layer so it does not trigger repaints on the canvas
+     or webcam layers. This is the single biggest GPU perf win. */
+  will-change: transform, opacity;
+  /* Containment: tells the browser this element's rendering is fully
+     self-contained — prevents layout/paint invalidations from
+     propagating to the rest of the page. */
+  contain: strict;
+  /* Ensure a 3D-accelerated layer (backstop for browsers that
+     ignore will-change on video elements) */
+  transform: translateZ(0);
 }
 
 #scene canvas {
   z-index: 5;
+  /* GPU layer promotion for the canvas — prevents the canvas backing
+     store from being re-composited with the video layers */
+  will-change: transform;
 }
 
 /* ═══════════════════════════════════════════════════════════

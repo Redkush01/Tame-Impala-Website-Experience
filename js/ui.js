@@ -25,6 +25,11 @@ var currentStepIdx  = 0;
 var stepTimeout     = null;
 var notifyTimeout   = null;
 
+/* Cached values for updateVolumeVisuals change-detection */
+var lastVolScale = -1;
+var lastVolOp = -1;
+var lastLogoScale = -1;
+
 var TUTORIAL_STEPS = [
   { icon: '🤏', text: 'pinch to control volume' },
   { icon: '🖐️', text: 'rotate left hand for reverb' },
@@ -94,25 +99,32 @@ export function updateTime(currentTime, duration) {
 }
 
 export function updateVolumeVisuals(volumeNorm) {
-  if (dom.volumeRing && volumeNorm !== undefined) {
-    /* volumeNorm is 0.0 to 1.0 */
-    var scale = 0.5 + (volumeNorm * 0.5);
-    var op    = 0.3 + (volumeNorm * 0.7);
-    dom.volumeRing.style.transform = 'scale(' + scale + ')';
-    dom.volumeRing.style.opacity   = op.toFixed(2);
-    /* Color shift based on volume */
+  if (volumeNorm === undefined) return;
+
+  /* Quantize to reduce DOM writes — only update when value changes visibly */
+  var scale = ((0.5 + (volumeNorm * 0.5)) * 100 + 0.5 | 0) / 100;
+  var op    = ((0.3 + (volumeNorm * 0.7)) * 100 + 0.5 | 0) / 100;
+
+  if (dom.volumeRing && (scale !== lastVolScale || op !== lastVolOp)) {
+    lastVolScale = scale;
+    lastVolOp = op;
     var r = 255 - Math.round(volumeNorm * 55);
     var g = 255;
     var b = 255 - Math.round(volumeNorm * 55);
+    dom.volumeRing.style.transform = 'scale(' + scale + ')';
+    dom.volumeRing.style.opacity   = op;
     dom.volumeRing.style.backgroundColor = 'rgba(' + r + ',' + g + ',' + b + ',' + op + ')';
     dom.volumeRing.style.boxShadow = '0 0 ' + Math.round(volumeNorm * 30) + 'px rgba(180,255,255,' + op + ')';
   }
-  
-  if (dom.tameLogo && volumeNorm !== undefined) {
-    var logoScale = 1.0 + (volumeNorm * 0.08);
-    var logoOp = 0.65 + (volumeNorm * 0.35);
-    dom.tameLogo.style.transform = 'translateX(-50%) scale(' + logoScale + ')';
-    dom.tameLogo.style.opacity = logoOp.toFixed(2);
+
+  if (dom.tameLogo) {
+    var logoScale = ((1.0 + (volumeNorm * 0.08)) * 100 + 0.5 | 0) / 100;
+    if (logoScale !== lastLogoScale) {
+      lastLogoScale = logoScale;
+      var logoOp = (0.65 + (volumeNorm * 0.35)).toFixed(2);
+      dom.tameLogo.style.transform = 'translateX(-50%) scale(' + logoScale + ')';
+      dom.tameLogo.style.opacity = logoOp;
+    }
   }
 }
 
@@ -121,12 +133,15 @@ export function showNotification(text) {
   
   clearTimeout(notifyTimeout);
   
-  /* Reset animation by cloning and replacing */
-  var newNotif = dom.notification.cloneNode(true);
-  dom.notification.parentNode.replaceChild(newNotif, dom.notification);
-  dom.notification = newNotif;
-  
+  /* Restart CSS animation without cloning the DOM node.
+     cloneNode+replaceChild leaked detached nodes over long sessions.
+     Instead: remove class → force synchronous reflow → re-add class.
+     The reflow (offsetWidth read) forces the browser to process the
+     class removal before we re-add it, restarting the animation. */
+  dom.notification.classList.remove('show');
   dom.notification.textContent = text;
+  /* Force reflow to restart animation — this is the standard technique */
+  void dom.notification.offsetWidth;
   dom.notification.classList.add('show');
   
   notifyTimeout = setTimeout(function () {

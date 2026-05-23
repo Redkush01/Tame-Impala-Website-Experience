@@ -18,6 +18,10 @@ var lastHornsState = false;
 var hintHidden = false;
 var easterEggState     = null;
 var previousHornsState = false;
+var lastFrameTime = 0;
+var lowFpsFrames = 0;
+var isDegraded = false;
+var isPageHidden = false;
 
 /* ── Initialization ── */
 window.addEventListener('DOMContentLoaded', function () {
@@ -89,18 +93,24 @@ async function startExperience() {
   ui.hideCurtain();
 
   /* Init overlay video (Autoplay Policy Safety) */
+  var isMobile = window.innerWidth <= 768;
   var overlayVid = document.getElementById('overlayVideo');
   if (overlayVid) {
-    overlayVid.muted = true;
-    overlayVid.loop = true;
-    overlayVid.playsInline = true;
-    /* Reduce decode cost — hint lower internal resolution */
-    overlayVid.width = 640;
-    overlayVid.height = 360;
-    overlayVid.src = "./assets_loop.mp4";
-    overlayVid.play().catch(function(err) {
-      console.warn("Overlay video play failed:", err);
-    });
+    if (isMobile) {
+      overlayVid.style.display = 'none';
+      overlayVid.src = "";
+    } else {
+      overlayVid.muted = true;
+      overlayVid.loop = true;
+      overlayVid.playsInline = true;
+      /* Reduce decode cost — hint lower internal resolution */
+      overlayVid.width = 640;
+      overlayVid.height = 360;
+      overlayVid.src = "./assets_loop.mp4";
+      overlayVid.play().catch(function(err) {
+        console.warn("Overlay video play failed:", err);
+      });
+    }
   }
 
   try {
@@ -139,6 +149,29 @@ async function startExperience() {
     ui.startTutorial();
     ui.showEasterEggHint();
     requestAnimationFrame(frameLoop);
+
+    /* ── Page Visibility: pause heavy work when tab is hidden ── */
+    document.addEventListener('visibilitychange', function() {
+      var overlayVid = document.getElementById('overlayVideo');
+      if (document.hidden) {
+        isPageHidden = true;
+        /* Pause overlay video decode + GPU filter work */
+        if (overlayVid && !overlayVid.paused) {
+          overlayVid.pause();
+          overlayVid._wasPlayingBeforeHide = true;
+        }
+      } else {
+        isPageHidden = false;
+        /* Reset frame timing to prevent stale-delta burst triggering
+           degraded mode when the tab comes back */
+        lastFrameTime = 0;
+        /* Resume overlay video */
+        if (overlayVid && overlayVid._wasPlayingBeforeHide) {
+          overlayVid.play().catch(function() {});
+          overlayVid._wasPlayingBeforeHide = false;
+        }
+      }
+    });
 
   } catch (err) {
     ui.showNotification("Error: " + err.message);
@@ -221,6 +254,39 @@ function onMediaPipeResults(results) {
 
 /* ── Single Render Loop ── */
 function frameLoop(now) {
+  requestAnimationFrame(frameLoop);
+
+  /* Skip all work when tab is hidden — prevents frame backlog */
+  if (isPageHidden) return;
+
+  /* FPS Monitor & Degraded Mode */
+  if (lastFrameTime > 0) {
+    var delta = now - lastFrameTime;
+    if (delta > 35) { /* < 28fps */
+      lowFpsFrames++;
+      if (lowFpsFrames > 120 && !isDegraded) {
+        isDegraded = true;
+        visuals.setDegradedMode(true);
+        ui.showNotification("PROGRESSIVE DEGRADATION ACTIVE");
+      }
+    } else if (delta < 22) { /* > 45fps */
+      if (isDegraded) {
+        lowFpsFrames--;
+        if (lowFpsFrames < -180) {
+          isDegraded = false;
+          visuals.setDegradedMode(false);
+          lowFpsFrames = 0;
+          ui.showNotification("PERFORMANCE RECOVERED");
+        }
+      } else {
+        lowFpsFrames = Math.max(0, lowFpsFrames - 1);
+      }
+    } else {
+      if (!isDegraded) lowFpsFrames = Math.max(0, lowFpsFrames - 1);
+    }
+  }
+  lastFrameTime = now;
+
   /* 1. Update Time-based systems */
   easterEgg.update(now);
 
@@ -233,6 +299,5 @@ function frameLoop(now) {
     if (track) ui.updateTime(track.currentTime, track.duration);
   }
 
-  /* 4. Loop */
-  requestAnimationFrame(frameLoop);
+  /* 4. Loop — rAF is scheduled at top of function */
 }

@@ -146,8 +146,8 @@ function filterLockedHands(multiLandmarks, multiHandedness) {
 /* ═══════════════════════════════════════════════════════════
    STATE
    ═══════════════════════════════════════════════════════════ */
-var prevRightPos  = null;
-var prevLeftPos   = null;
+var prevRightPos  = null;   /* reused persistent object — see below */
+var prevLeftPos   = null;   /* reused persistent object — see below */
 var lastValidRightY = 0.5;
 var lastValidLeftY  = 0.5;
 var currentVolume = 0;
@@ -163,57 +163,71 @@ var SWIPE_THRESHOLD   = 0.10;
 var SWIPE_COOLDOWN    = 2000;     /* ms cooldown after swipe */
 var swipeCooldownUntil = 0;
 
-/* Wave gesture detection (for easter egg) */
-var waveHistory     = [];
-var WAVE_WINDOW     = 3500;       /* ms of history to analyze */
-var WAVE_MIN_AMP    = 0.05;       /* minimum wrist travel in X */
+/* Wave gesture detection (for easter egg) — ring buffer to avoid splice GC */
+var WAVE_BUF_SIZE    = 50;         /* max samples */
+var waveBuf          = new Array(WAVE_BUF_SIZE);
+var waveBufWrite     = 0;          /* next write index */
+var waveBufCount     = 0;          /* how many valid entries */
+var WAVE_WINDOW      = 3500;       /* ms of history to analyze */
+var WAVE_MIN_AMP     = 0.05;       /* minimum wrist travel in X */
+
+/* Pre-allocate wave sample objects */
+for (var _wi = 0; _wi < WAVE_BUF_SIZE; _wi++) {
+  waveBuf[_wi] = { lx: 0, rx: 0, t: 0 };
+}
 
 function detectWaveGesture(leftWristX, rightWristX) {
   var now = performance.now();
-  waveHistory.push({ lx: leftWristX, rx: rightWristX, t: now });
 
-  /* Trim old entries (in-place — no new array) */
-  var trimIdx = 0;
-  while (trimIdx < waveHistory.length && now - waveHistory[trimIdx].t >= WAVE_WINDOW) trimIdx++;
-  if (trimIdx > 0) waveHistory.splice(0, trimIdx);
-  if (waveHistory.length < 18) return false;
+  /* Write into ring buffer (overwrite oldest) */
+  var entry = waveBuf[waveBufWrite];
+  entry.lx = leftWristX;
+  entry.rx = rightWristX;
+  entry.t  = now;
+  waveBufWrite = (waveBufWrite + 1) % WAVE_BUF_SIZE;
+  if (waveBufCount < WAVE_BUF_SIZE) waveBufCount++;
 
-  /* Count direction reversals (peaks) and synchronization */
+  if (waveBufCount < 18) return false;
+
+  /* Read ring buffer in chronological order, skipping stale entries */
+  var validCount   = 0;
   var dirChanges   = 0;
   var prevDir      = 0;
   var syncCount    = 0;
   var totalChecked = 0;
-
-  for (var i = 1; i < waveHistory.length; i++) {
-    var dlx = waveHistory[i].lx - waveHistory[i - 1].lx;
-    var drx = waveHistory[i].rx - waveHistory[i - 1].rx;
-
-    if (Math.abs(dlx) < 0.002) continue;  /* skip noise */
-    totalChecked++;
-
-    /* Both hands same direction = sync */
-    if (Math.sign(dlx) === Math.sign(drx) && Math.abs(drx) > 0.002) {
-      syncCount++;
-    }
-
-    var dir = Math.sign(dlx);
-    if (dir !== 0 && dir !== prevDir && prevDir !== 0) {
-      dirChanges++;
-    }
-    if (dir !== 0) prevDir = dir;
-  }
-
-  var syncRatio = totalChecked > 0 ? syncCount / totalChecked : 0;
-
-  /* Calculate amplitude (total X range of left wrist) */
   var minX = Infinity, maxX = -Infinity;
-  for (var j = 0; j < waveHistory.length; j++) {
-    if (waveHistory[j].lx < minX) minX = waveHistory[j].lx;
-    if (waveHistory[j].lx > maxX) maxX = waveHistory[j].lx;
+  var prevLx = 0, prevRx = 0, hasPrev = false;
+
+  for (var k = 0; k < waveBufCount; k++) {
+    var idx = (waveBufWrite - waveBufCount + k + WAVE_BUF_SIZE) % WAVE_BUF_SIZE;
+    var sample = waveBuf[idx];
+    if (now - sample.t > WAVE_WINDOW) continue;  /* stale */
+    validCount++;
+
+    if (sample.lx < minX) minX = sample.lx;
+    if (sample.lx > maxX) maxX = sample.lx;
+
+    if (hasPrev) {
+      var dlx = sample.lx - prevLx;
+      var drx = sample.rx - prevRx;
+
+      if (Math.abs(dlx) >= 0.002) {
+        totalChecked++;
+        if (Math.sign(dlx) === Math.sign(drx) && Math.abs(drx) > 0.002) syncCount++;
+        var dir = Math.sign(dlx);
+        if (dir !== 0 && dir !== prevDir && prevDir !== 0) dirChanges++;
+        if (dir !== 0) prevDir = dir;
+      }
+    }
+    prevLx = sample.lx;
+    prevRx = sample.rx;
+    hasPrev = true;
   }
+
+  if (validCount < 18) return false;
+  var syncRatio = totalChecked > 0 ? syncCount / totalChecked : 0;
   var amplitude = maxX - minX;
 
-  /* Need ≥4 direction changes (≥2 full cycles), ≥50% sync, sufficient amplitude */
   return dirChanges >= 4 && syncRatio > 0.45 && amplitude > WAVE_MIN_AMP;
 }
 
@@ -337,12 +351,14 @@ export function processHands(results) {
     ) / 5;
     openAmount += clamp((avgTip - 0.08) / 0.3, 0, 1);
 
-    /* Speed */
-    var rW = { x: wrist.x, y: wrist.y };
+    /* Speed — reuse prevRightPos object to avoid per-frame allocation */
     if (prevRightPos) {
-      rightSpeed = clamp(Math.hypot(rW.x - prevRightPos.x, rW.y - prevRightPos.y) * 20, 0, 1);
+      rightSpeed = clamp(Math.hypot(wrist.x - prevRightPos.x, wrist.y - prevRightPos.y) * 20, 0, 1);
+      prevRightPos.x = wrist.x;
+      prevRightPos.y = wrist.y;
+    } else {
+      prevRightPos = { x: wrist.x, y: wrist.y };
     }
-    prevRightPos = rW;
 
     /* Horns */
     output.isHorns = isHornGesture(rightLand);
@@ -402,11 +418,14 @@ export function processHands(results) {
     ) / 4;
     openAmount += clamp((spread - 0.1) / 0.35, 0, 1);
 
-    var lW = { x: lWrist.x, y: lWrist.y };
+    /* Speed — reuse prevLeftPos object to avoid per-frame allocation */
     if (prevLeftPos) {
-      leftSpeed = clamp(Math.hypot(lW.x - prevLeftPos.x, lW.y - prevLeftPos.y) * 20, 0, 1);
+      leftSpeed = clamp(Math.hypot(lWrist.x - prevLeftPos.x, lWrist.y - prevLeftPos.y) * 20, 0, 1);
+      prevLeftPos.x = lWrist.x;
+      prevLeftPos.y = lWrist.y;
+    } else {
+      prevLeftPos = { x: lWrist.x, y: lWrist.y };
     }
-    prevLeftPos = lW;
 
     output.reverbAmount = clamp((leftLand[5].x - leftLand[17].x + 0.18) * 2.6, 0, 1);
   } else {
