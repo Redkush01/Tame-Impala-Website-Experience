@@ -1,4 +1,7 @@
 # Tame Impala Website Experience (UI/UX project)
+
+#link: https://redkush01.github.io/Tame-Impala-Website-Experience/
+
 Interactive web-based gestural interface for real-time audio-visual control. Developed using MediaPipe for computer vision and hand tracking, integrated with custom JS logic for low-latency multimedia interaction.
 An experience that explores the intersection of gesture control and psychedelic audio-visual feedback.
 
