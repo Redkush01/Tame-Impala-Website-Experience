@@ -91,10 +91,13 @@ async function startExperience() {
   /* Init overlay video (Autoplay Policy Safety) */
   var overlayVid = document.getElementById('overlayVideo');
   if (overlayVid) {
-    overlayVid.src = "./assets_loop.mp4";
     overlayVid.muted = true;
     overlayVid.loop = true;
     overlayVid.playsInline = true;
+    /* Reduce decode cost — hint lower internal resolution */
+    overlayVid.width = 640;
+    overlayVid.height = 360;
+    overlayVid.src = "./assets_loop.mp4";
     overlayVid.play().catch(function(err) {
       console.warn("Overlay video play failed:", err);
     });

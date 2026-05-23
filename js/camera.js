@@ -21,7 +21,12 @@ export async function startCamera(video) {
   }
 
   stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'user' }
+    video: {
+      facingMode: 'user',
+      width:     { ideal: 640, max: 640 },
+      height:    { ideal: 480, max: 480 },
+      frameRate: { ideal: 30,  max: 30 }
+    }
   });
 
   video.srcObject = stream;
@@ -96,22 +101,14 @@ function restartMediaPipe() {
 /* ── Detection loop ── */
 function detectLoop() {
   if (!detectionActive || !videoElement) return;
-  
-  if (isProcessingFrame) {
-    requestAnimationFrame(detectLoop);
-    return;
-  }
-  
+  requestAnimationFrame(detectLoop);
+
+  if (isProcessingFrame) return;   /* drop frame — previous still in-flight */
+
   isProcessingFrame = true;
   hands.send({ image: videoElement })
-    .then(function ()  { 
-      isProcessingFrame = false;
-      if (detectionActive) requestAnimationFrame(detectLoop); 
-    })
-    .catch(function () { 
-      isProcessingFrame = false;
-      if (detectionActive) requestAnimationFrame(detectLoop); 
-    });
+    .then(function ()  { isProcessingFrame = false; })
+    .catch(function () { isProcessingFrame = false; });
 }
 
 /* ── Stop ── */

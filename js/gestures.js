@@ -172,8 +172,10 @@ function detectWaveGesture(leftWristX, rightWristX) {
   var now = performance.now();
   waveHistory.push({ lx: leftWristX, rx: rightWristX, t: now });
 
-  /* Trim old entries */
-  waveHistory = waveHistory.filter(function (e) { return now - e.t < WAVE_WINDOW; });
+  /* Trim old entries (in-place — no new array) */
+  var trimIdx = 0;
+  while (trimIdx < waveHistory.length && now - waveHistory[trimIdx].t >= WAVE_WINDOW) trimIdx++;
+  if (trimIdx > 0) waveHistory.splice(0, trimIdx);
   if (waveHistory.length < 18) return false;
 
   /* Count direction reversals (peaks) and synchronization */
@@ -325,10 +327,14 @@ export function processHands(results) {
     output.volume = clamp(currentVolume, 0, 1);
 
     /* Open amount (for burst) */
-    var rTips  = [4, 8, 12, 16, 20].map(function (j) { return rightLand[j]; });
-    var avgTip = rTips.reduce(function (s, p) {
-      return s + Math.hypot(p.x - wrist.x, p.y - wrist.y);
-    }, 0) / rTips.length;
+    /* Inline tip-distance average — no temp arrays */
+    var avgTip = (
+      Math.hypot(rightLand[4].x - wrist.x, rightLand[4].y - wrist.y) +
+      Math.hypot(rightLand[8].x - wrist.x, rightLand[8].y - wrist.y) +
+      Math.hypot(rightLand[12].x - wrist.x, rightLand[12].y - wrist.y) +
+      Math.hypot(rightLand[16].x - wrist.x, rightLand[16].y - wrist.y) +
+      Math.hypot(rightLand[20].x - wrist.x, rightLand[20].y - wrist.y)
+    ) / 5;
     openAmount += clamp((avgTip - 0.08) / 0.3, 0, 1);
 
     /* Speed */
@@ -387,10 +393,13 @@ export function processHands(results) {
     var lWrist = leftLand[0];
     lastValidLeftY = clamp(lWrist.y, 0, 1);
     output.leftY = lastValidLeftY;
-    var lTips  = [8, 12, 16, 20].map(function (j) { return leftLand[j]; });
-    var spread = lTips.reduce(function (s, p) {
-      return s + Math.hypot(p.x - lWrist.x, p.y - lWrist.y);
-    }, 0) / lTips.length;
+    /* Inline tip-distance average — no temp arrays */
+    var spread = (
+      Math.hypot(leftLand[8].x - lWrist.x, leftLand[8].y - lWrist.y) +
+      Math.hypot(leftLand[12].x - lWrist.x, leftLand[12].y - lWrist.y) +
+      Math.hypot(leftLand[16].x - lWrist.x, leftLand[16].y - lWrist.y) +
+      Math.hypot(leftLand[20].x - lWrist.x, leftLand[20].y - lWrist.y)
+    ) / 4;
     openAmount += clamp((spread - 0.1) / 0.35, 0, 1);
 
     var lW = { x: lWrist.x, y: lWrist.y };

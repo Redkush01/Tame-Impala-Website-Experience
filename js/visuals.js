@@ -73,6 +73,9 @@ function allocateField() {
 
 function I(col, row) { return row * COLS + col; }
 
+/* Linear interpolation — hoisted to avoid per-frame closure allocation */
+function lerp(a, b, t) { return a + (b - a) * t; }
+
 /* Cheap layered-sine noise (Perlin approximation) */
 function noise2d(x, y, t) {
   return Math.sin(x * 0.31 + t) * Math.cos(y * 0.37 + t * 0.71) * 0.45
@@ -167,15 +170,16 @@ function stepSimulation(gestureData) {
   }
 
   /* ── 2. Hand forces ── */
-  var activeHands = [];
-  if (gestureData.rightHand) activeHands.push({ lm: gestureData.rightHand, isRight: true, speed: gestureData.rightSpeed || 0 });
-  if (gestureData.leftHand) activeHands.push({ lm: gestureData.leftHand, isRight: false, speed: gestureData.leftSpeed || 0 });
-
-  if (activeHands.length > 0) {
-    for (var h = 0; h < activeHands.length; h++) {
-      var lm = activeHands[h].lm;
-      var isRight = activeHands[h].isRight;
-      var speed = activeHands[h].speed;
+  /* Process hands without temporary array allocation */
+  for (var _h = 0; _h < 2; _h++) {
+    var lm, isRight, speed;
+    if (_h === 0) {
+      if (!gestureData.rightHand) continue;
+      lm = gestureData.rightHand; isRight = true; speed = gestureData.rightSpeed || 0;
+    } else {
+      if (!gestureData.leftHand) continue;
+      lm = gestureData.leftHand; isRight = false; speed = gestureData.leftSpeed || 0;
+    }
 
       /* Palm center → grid coords */
       var px = lm[9].x * canvas.width / CELL_SIZE;
@@ -218,7 +222,6 @@ function stepSimulation(gestureData) {
       if (openAmt < 0.35) {
         injectForce(px, py, 0, 0, 3, (1 - openAmt) * 0.6);
       }
-    }
   }
 
   /* ── 3. Vortex disturbances (horns) ── */
@@ -305,14 +308,16 @@ function drawBodyPresence(gestureData) {
   bodyState.right.alpha = Math.max(0, bodyState.right.alpha - 0.05);
   bodyState.left.alpha = Math.max(0, bodyState.left.alpha - 0.05);
   
-  var activeHands = [];
-  if (gestureData.rightHand) activeHands.push({ lm: gestureData.rightHand, isRight: true });
-  if (gestureData.leftHand) activeHands.push({ lm: gestureData.leftHand, isRight: false });
-
-  if (activeHands.length > 0) {
-    for (var i = 0; i < activeHands.length; i++) {
-      var lm = activeHands[i].lm;
-      var isRight = activeHands[i].isRight;
+  /* Process hands without temporary array allocation */
+  for (var _hi = 0; _hi < 2; _hi++) {
+    var lm, isRight;
+    if (_hi === 0) {
+      if (!gestureData.rightHand) continue;
+      lm = gestureData.rightHand; isRight = true;
+    } else {
+      if (!gestureData.leftHand) continue;
+      lm = gestureData.leftHand; isRight = false;
+    }
       var state = isRight ? bodyState.right : bodyState.left;
       
       state.alpha = Math.min(1.0, state.alpha + 0.2);
@@ -375,7 +380,7 @@ function drawBodyPresence(gestureData) {
     /* Energetic Presence Mask (Soft Gaussian Blob) */
     var grad = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
     
-    var lerp = function(a, b, t) { return a + (b - a) * t; };
+
     
     /* Color Interpolation: Idle -> Psychedelic Liquid Hold */
     var coreR = lerp(255, 88, hc) | 0;
@@ -410,11 +415,9 @@ function drawBodyPresence(gestureData) {
     ctx.ellipse(0, 0, radius, radius * 0.8, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-  }
-  
+
   ctx.restore();
 }
-
 /* ═══════════════════════════════════════════════════════
    RENDER: FIELD LAYER
    ═══════════════════════════════════════════════════════ */
@@ -557,9 +560,13 @@ export function render(gestureData, easterEggState) {
   stepSimulation(gestureData);
 
   /* LAYER 1: The CSS <video> is physically behind the canvas.
-     We just draw a translucent dark veil so the video shines through but text stays readable. */
+     We draw a translucent dreamy violet veil so the natural video shines through 
+     while maintaining a cinematic neon/violet atmosphere. */
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = 'rgba(10, 5, 24, 0.45)'; 
+  var grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grad.addColorStop(0, 'rgba(40, 15, 70, 0.55)');
+  grad.addColorStop(1, 'rgba(10, 5, 30, 0.65)');
+  ctx.fillStyle = grad;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
   /* LAYER 2: Body Presence Layer */
