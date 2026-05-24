@@ -48,19 +48,6 @@ No external frameworks are used to maintain full control over rendering and exec
 
 The application is divided into four independent modules:
 ```mermaid
-flowchart LR  
-    A[Camera / MediaPipe] --> B[Gestures Module]  
-    B --> C[Visuals Engine]  
-    B --> D[Audio Engine]  
-  
-    C --> E[Canvas Render Loop]  
-    D --> F[Web Audio Graph]  
-  
-    A -->|Frame Data| B  
-    B -->|Normalized Signals| C  
-    B -->|Modulation Values| D
-```
-```mermaid
 graph TD
     classDef orchestrator fill:#a855f7,stroke:#7c3aed,stroke-width:2px,color:#fff;
     classDef input fill:#00e5ff,stroke:#00b8d4,stroke-width:2px,color:#000;
