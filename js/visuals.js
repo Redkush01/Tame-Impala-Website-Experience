@@ -1,4 +1,3 @@
-
 /* ── Grid Constants ── */
 var isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 var CELL_SIZE = isMobile ? 32 : 18;
@@ -55,15 +54,26 @@ var resizeObserver = null;
 
 export function init(canvasElement, videoElement) {
   canvas = canvasElement;
-  ctx    = canvas.getContext('2d', { alpha: false }); /* optimization: opaque backing */
+  /* alpha:true required — clearRect must produce real transparency so the CSS
+     compositor blends the veil correctly over the video layer.
+     alpha:false caused cross-browser compositing inconsistency. */
+  ctx    = canvas.getContext('2d', { alpha: true });
   video  = videoElement;
 
   resizeCanvas();
 
-  /* Enforce ResizeObserver for exact DOM layout tracking */
+  /* ResizeObserver debounced via rAF: prevents firing during intermediate
+     layout states (e.g. while fonts load on CDN), which would call
+     resizeCanvas() with rect.width === 0 and zero out field buffers. */
   if (typeof ResizeObserver !== 'undefined') {
-    resizeObserver = new ResizeObserver(function() {
-      resizeCanvas();
+    var _resizePending = false;
+    resizeObserver = new ResizeObserver(function () {
+      if (_resizePending) return;
+      _resizePending = true;
+      requestAnimationFrame(function () {
+        _resizePending = false;
+        resizeCanvas();
+      });
     });
     resizeObserver.observe(canvas);
   } else {

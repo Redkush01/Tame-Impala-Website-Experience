@@ -26,7 +26,8 @@ var isPageHidden = false;
 /* ── Initialization ── */
 window.addEventListener('DOMContentLoaded', function () {
   ui.init();
-  visuals.init(canvas, video);
+  /* visuals.init() is called inside startExperience(), after the initial
+     state lock ensures video dimensions are real and MediaPipe is live. */
   audio.init(trackA, trackB);
   
   /* Bind start events */
@@ -85,6 +86,24 @@ window.addEventListener('DOMContentLoaded', function () {
   });
 });
 
+/* ── waitForVideoReady ──────────────────────────────────────────────────────
+   Resolves when the browser has committed real pixel dimensions to the video
+   element. loadeddata (used inside startCamera) fires when buffering starts —
+   videoWidth/videoHeight may still be 0 at that point, especially on CDN.   */
+function waitForVideoReady(videoEl) {
+  return new Promise(function (resolve) {
+    if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) { resolve(); return; }
+    function done() {
+      videoEl.removeEventListener('loadedmetadata', done);
+      videoEl.removeEventListener('canplay',        done);
+      resolve();
+    }
+    videoEl.addEventListener('loadedmetadata', done);
+    videoEl.addEventListener('canplay',        done);
+    setTimeout(resolve, 4000); /* safety net */
+  });
+}
+
 /* ── Boot Flow ── */
 async function startExperience() {
   if (hasStarted) return;
@@ -115,17 +134,48 @@ async function startExperience() {
 
   try {
     await camera.startCamera(video);
-    
-    /* Initialize audio context and graph */
+
+    /* ── INITIAL STATE LOCK ─────────────────────────────────────────────────
+       The renderer must not start until ALL subsystems are in a known state.
+       On localhost these converge in ~5 ms (masked the bug).
+       On GitHub Pages CDN the WASM arrives 300–600 ms later (exposed the bug).
+
+       Gate conditions:
+         1. video.videoWidth > 0   — canvas can be sized on real dimensions
+         2. first onResults() fired — gestureData is populated, not {}
+
+       Promise.all enforces both simultaneously. The renderer sees a fully
+       deterministic initial state regardless of network speed or environment. */
+
+    /* Prepare the first-result promise BEFORE starting MediaPipe so the
+       resolver is in scope for the callback below. */
+    var _resolveFirstResult;
+    var firstResultReady = new Promise(function (resolve) {
+      _resolveFirstResult = resolve;
+      setTimeout(resolve, 5000); /* safety net: no hands in frame */
+    });
+
+    /* Start MediaPipe — intercept first result to signal readiness */
+    await camera.startMediaPipe(function (results) {
+      onMediaPipeResults(results);
+      _resolveFirstResult(); /* signal: gestureData is now populated */
+    });
+
+    /* Block until BOTH gates are open */
+    await Promise.all([
+      waitForVideoReady(video),
+      firstResultReady
+    ]);
+
+    /* ── All subsystems ready. State is deterministic from here. ── */
+
+    visuals.init(canvas, video); /* canvas sized on real video dimensions   */
     audio.initGraph();
     await audio.play();
-    
+
     var pl = audio.getPlaylist();
     ui.setTrackName(pl[0].name);
     ui.updateSongSelector(0);
-
-    /* Start MediaPipe and callbacks */
-    await camera.startMediaPipe(onMediaPipeResults);
     
     /* Setup Easter Egg callbacks */
     easterEgg.init(
@@ -145,7 +195,7 @@ async function startExperience() {
       }
     );
 
-    /* Start UI tutorial and Frame Loop */
+    /* State lock passed — start tutorial and renderer */
     ui.startTutorial();
     ui.showEasterEggHint();
     requestAnimationFrame(frameLoop);
