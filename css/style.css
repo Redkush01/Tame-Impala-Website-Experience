@@ -216,6 +216,7 @@ html, body {
   /* Natural webcam feed: no filters or blend modes to preserve realism */
   /* GPU layer promotion: prevents scaleX(-1) from re-rasterizing each frame */
   will-change: transform;
+  backface-visibility: hidden;
 }
 
 #overlayVideo {
@@ -243,6 +244,7 @@ html, body {
   /* Ensure a 3D-accelerated layer (backstop for browsers that
      ignore will-change on video elements) */
   transform: translateZ(0);
+  pointer-events: none;
 }
 
 #scene canvas {
@@ -262,6 +264,7 @@ html, body {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.8s var(--ease-smooth);
+  will-change: opacity;
 }
 
 #hud.visible {
@@ -401,6 +404,7 @@ html, body {
   opacity: 0;
   transition: opacity 2s var(--ease-smooth) 0.8s, transform 2.5s var(--ease-smooth) 0.8s;
   align-items: flex-end;
+  will-change: transform, opacity;
 }
 
 #song-selector.visible {
