@@ -396,10 +396,7 @@ export function processHands(results) {
       }
     }
   } else {
-    // DO NOT wipe prevRightPos immediately, let it persist for a few frames?
-    // User requested: "MAI reset al centro, MAI fallback spaziale".
-    // We already keep lastValidRightY. But we should also not reset swipeState instantly if it's just a 1-frame drop.
-    // However, for simplicity and safety against stuck hold, we can just clear prevRightPos and swipeState when completely lost.
+    // DO NOT wipe prevRightPos immediately.
     prevRightPos = null;
     swipeState   = 'idle';
   }
