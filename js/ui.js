@@ -1,6 +1,5 @@
 /**
  * ui.js — Minimal immersive UI controller
- * Manages curtain, tutorial overlay, and HUD without touching audio/visual logic.
  */
 
 /* ── DOM References ── */
